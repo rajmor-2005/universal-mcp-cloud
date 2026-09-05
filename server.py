@@ -3,6 +3,7 @@ from mcp.server.stdio import stdio_server
 from mcp import types
 import httpx
 import asyncio
+import urllib.parse
 
 
 async def handle_list_tools(ctx, params):
@@ -26,25 +27,52 @@ async def handle_list_tools(ctx, params):
     )
 
 
-import urllib.parse
-
-
 async def handle_call_tool(ctx, params):
     if params.name == "get_weather":
-        city = params.arguments["city"]
-        encoded_city = urllib.parse.quote(city)
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"https://wttr.in/{encoded_city}?format=j1"
-            )
-            data = response.json()
-            temp = data["current_condition"][0]["temp_C"]
-            desc = data["current_condition"][0]["weatherDesc"][0]["value"]
+        city = params.arguments.get("city", "").strip()
+        if not city:
             return types.CallToolResult(
                 content=[types.TextContent(
                     type="text",
-                    text=f"{city} weather: {temp}°C, {desc}"
-                )]
+                    text="Error: City name is required."
+                )],
+                isError=True
+            )
+
+        encoded_city = urllib.parse.quote(city)
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    f"https://wttr.in/{encoded_city}?format=j1"
+                )
+                if response.status_code != 200:
+                    return types.CallToolResult(
+                        content=[types.TextContent(
+                            type="text",
+                            text=f"Error: Unable to fetch weather for '{city}' (Status {response.status_code})."
+                        )],
+                        isError=True
+                    )
+
+                data = response.json()
+                current = data.get("current_condition", [{}])[0]
+                temp = current.get("temp_C", "N/A")
+                desc_list = current.get("weatherDesc", [{}])
+                desc = desc_list[0].get("value", "Unknown") if desc_list else "Unknown"
+
+                return types.CallToolResult(
+                    content=[types.TextContent(
+                        type="text",
+                        text=f"{city} weather: {temp}°C, {desc}"
+                    )]
+                )
+        except Exception as e:
+            return types.CallToolResult(
+                content=[types.TextContent(
+                    type="text",
+                    text=f"Error fetching weather for '{city}': {str(e)}"
+                )],
+                isError=True
             )
 
 

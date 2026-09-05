@@ -57,6 +57,7 @@ export default function ConnectorsPage() {
   
   // Health diagnostics
   const [healthStatus, setHealthStatus] = useState<Record<string, { loading: boolean; data?: any }>>({});
+  const activeApiUrl = ((typeof window !== 'undefined' ? process.env.NEXT_PUBLIC_API_URL : null) || 'http://localhost:4000').replace(/\/+$/, '');
 
   const categories = [
     { label: 'All', key: 'All' },
@@ -749,7 +750,7 @@ export default function ConnectorsPage() {
   "mcpServers": {
     "${detailModalConnector.slug}": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-fetch", "http://localhost:4000/api/v1/mcp/u/${currentWorkspace?.id || 'ws_default'}"],
+      "args": ["-y", "@modelcontextprotocol/server-fetch", "${activeApiUrl}/api/v1/mcp/u/${currentWorkspace?.id || 'ws_default'}"],
       "headers": {
         "Authorization": "Bearer YOUR_WORKSPACE_API_KEY"
       }

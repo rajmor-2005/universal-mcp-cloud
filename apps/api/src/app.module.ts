@@ -43,20 +43,24 @@ import { HealthModule } from './modules/health/health.module';
       },
     ]),
     ScheduleModule.forRoot(),
-    BullModule.forRoot({
-      connection: {
-        host: new URL(getConfig().REDIS_URL).hostname,
-        port: parseInt(new URL(getConfig().REDIS_URL).port || '6379', 10),
-        enableOfflineQueue: false,
-        maxRetriesPerRequest: null,
-      },
-      defaultJobOptions: {
-        removeOnComplete: { count: 1000 },
-        removeOnFail: { count: 5000 },
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 1000 },
-      },
-    }),
+    ...(process.env.ENABLE_WORKERS === 'true'
+      ? [
+          BullModule.forRoot({
+            connection: {
+              host: new URL(getConfig().REDIS_URL).hostname,
+              port: parseInt(new URL(getConfig().REDIS_URL).port || '6379', 10),
+              enableOfflineQueue: false,
+              maxRetriesPerRequest: null,
+            },
+            defaultJobOptions: {
+              removeOnComplete: { count: 1000 },
+              removeOnFail: { count: 5000 },
+              attempts: 3,
+              backoff: { type: 'exponential', delay: 1000 },
+            },
+          }),
+        ]
+      : []),
 
     // ─── Core ───────────────────────────────────────
     DatabaseModule,

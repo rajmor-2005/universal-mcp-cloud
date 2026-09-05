@@ -10,7 +10,8 @@ export function Header({ title }: { title: string }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const { currentWorkspace, theme, toggleTheme } = useAuth();
 
-  const endpointUrl = currentWorkspace?.mcpEndpoint || `http://localhost:4000/mcp/u/${currentWorkspace?.id || 'ws_default'}`;
+  const apiBase = (typeof window !== 'undefined' ? process.env.NEXT_PUBLIC_API_URL : null) || 'http://localhost:4000';
+  const endpointUrl = currentWorkspace?.mcpEndpoint || `${apiBase.replace(/\/$/, '')}/api/v1/mcp/u/${currentWorkspace?.id || 'ws_default'}`;
 
   const copyEndpoint = () => {
     navigator.clipboard.writeText(endpointUrl);

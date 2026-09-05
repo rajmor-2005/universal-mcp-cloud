@@ -468,9 +468,10 @@ export class ToolExecutionService {
 
           if (connectorSlug === 'github') {
             if (response.status === 401) {
+              const appUrl = process.env.APP_URL || 'https://universal-mcp-cloud.vercel.app';
               throw new ConnectorError(
                 connectorSlug,
-                `GitHub API returned 401 (Bad Credentials). Please go to http://localhost:3000/connectors -> Active Integrations, click Reconnect on GitHub, and paste a valid Personal Access Token (ghp_...).`,
+                `GitHub API returned 401 (Bad Credentials). Please go to ${appUrl}/connectors -> Active Integrations, click Reconnect on GitHub, and paste a valid Personal Access Token (ghp_...).`,
               );
             }
 

@@ -33,7 +33,8 @@ export default function McpEndpointPage() {
   const [testResponse, setTestResponse] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
 
-  const endpointUrl = `http://localhost:4000/api/v1/mcp/u/${currentWorkspace?.id || 'default'}`;
+  const apiBase = (typeof window !== 'undefined' ? process.env.NEXT_PUBLIC_API_URL : null) || 'http://localhost:4000';
+  const endpointUrl = `${apiBase.replace(/\/$/, '')}/api/v1/mcp/u/${currentWorkspace?.id || 'default'}`;
 
   const loadApiKeys = async () => {
     if (!currentOrg || !currentWorkspace) return;

@@ -38,7 +38,9 @@ async function bootstrap() {
   });
 
   // ─── API Versioning ─────────────────────────────────
-  app.setGlobalPrefix('api');
+  app.setGlobalPrefix('api', {
+    exclude: ['health', 'health/ready', 'health/live'],
+  });
   app.enableVersioning({
     type: VersioningType.URI,
     defaultVersion: '1',

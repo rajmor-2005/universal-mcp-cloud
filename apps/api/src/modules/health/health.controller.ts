@@ -1,10 +1,10 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, VERSION_NEUTRAL } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { DatabaseService } from '../../common/database/database.service';
 import { RedisService } from '../../common/redis/redis.service';
 
 @ApiTags('health')
-@Controller('health')
+@Controller({ path: 'health', version: [VERSION_NEUTRAL, '1'] })
 export class HealthController {
   constructor(
     private readonly db: DatabaseService,
