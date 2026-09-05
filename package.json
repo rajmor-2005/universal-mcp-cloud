@@ -31,7 +31,7 @@
     "docker:down": "docker compose down",
     "docker:build": "docker compose -f docker-compose.yml -f docker-compose.prod.yml build",
     "clean": "turbo run clean && rimraf node_modules",
-    "prepare": "husky"
+    "prepare": "node -e \"try { require('child_process').execSync('husky', {stdio:'ignore'}) } catch (e) {}\""
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
