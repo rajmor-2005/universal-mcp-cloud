@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+.next/
+out/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test
+coverage/
+
+# Turbo
+.turbo/
+
+# Docker
+docker-compose.override.yml
+
+# Python (legacy)
+__pycache__/
+venv/
+*.pyc
+
+# Prisma
+packages/database/prisma/*.db
+
+# Misc
+*.tgz
+.cache/
+
+.vercel
+.env*
+!.env.example
+*.tsbuildinfo

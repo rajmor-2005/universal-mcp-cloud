@@ -1,0 +1,556 @@
+// ─── Prisma Schema for Universal MCP Cloud ──────────
+// All core models for the platform.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════════════════════════════════════
+//  AUTHENTICATION & USERS
+// ═══════════════════════════════════════════════════════
+
+model User {
+  id              String    @id @default(uuid()) @db.Uuid
+  email           String    @unique @db.VarChar(255)
+  name            String?   @db.VarChar(100)
+  avatarUrl       String?   @db.VarChar(500)
+  passwordHash    String?   @db.VarChar(255)
+  emailVerified   Boolean   @default(false)
+  mfaEnabled      Boolean   @default(false)
+  isActive        Boolean   @default(true)
+  lastLoginAt     DateTime?
+  loginAttempts   Int       @default(0)
+  lockedUntil     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  accounts             Account[]
+  sessions             Session[]
+  passkeys             Passkey[]
+  mfaCredentials       MfaCredential[]
+  ownedOrganizations   Organization[]     @relation("OrgOwner")
+  orgMemberships       OrgMember[]
+  workspaceMemberships WorkspaceMember[]
+  apiKeys              ApiKey[]
+  events               Event[]            @relation("EventActor")
+  invitationsSent      Invitation[]       @relation("InvitedBy")
+
+  @@index([email])
+  @@map("users")
+}
+
+model Account {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @db.Uuid
+  provider          String   @db.VarChar(50)  // EMAIL, GOOGLE, GITHUB
+  providerAccountId String   @db.VarChar(255)
+  accessToken       String?  @db.Text
+  refreshToken      String?  @db.Text
+  tokenExpiresAt    DateTime?
+  scope             String?  @db.Text
+  idToken           String?  @db.Text
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @db.Uuid
+  tokenHash    String   @unique @db.VarChar(255)
+  ipAddress    String?  @db.VarChar(45)
+  userAgent    String?  @db.VarChar(500)
+  expiresAt    DateTime
+  lastActiveAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Passkey {
+  id                  String   @id @default(uuid()) @db.Uuid
+  userId              String   @db.Uuid
+  credentialId        String   @unique @db.Text
+  publicKey           Bytes
+  counter             BigInt   @default(0)
+  deviceType          String   @db.VarChar(50)
+  backedUp            Boolean  @default(false)
+  transports          String[] @db.VarChar(50)
+  displayName         String?  @db.VarChar(100)
+  lastUsedAt          DateTime?
+  createdAt           DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("passkeys")
+}
+
+model MfaCredential {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  method    String   @db.VarChar(20)  // TOTP
+  secret    String   @db.VarChar(500) // Encrypted TOTP secret
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, method])
+  @@map("mfa_credentials")
+}
+
+model MagicLink {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @db.VarChar(255)
+  tokenHash String   @unique @db.VarChar(255)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([expiresAt])
+  @@map("magic_links")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  tokenHash String   @unique @db.VarChar(255)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+// ═══════════════════════════════════════════════════════
+//  ORGANIZATIONS & WORKSPACES
+// ═══════════════════════════════════════════════════════
+
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(100)
+  slug      String   @unique @db.VarChar(50)
+  logoUrl   String?  @db.VarChar(500)
+  ownerId   String   @db.Uuid
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner          User            @relation("OrgOwner", fields: [ownerId], references: [id])
+  members        OrgMember[]
+  workspaces     Workspace[]
+  subscriptions  Subscription[]
+  invitations    Invitation[]
+  usageRecords   UsageRecord[]
+
+  @@index([slug])
+  @@index([ownerId])
+  @@map("organizations")
+}
+
+model OrgMember {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @db.Uuid
+  organizationId String   @db.Uuid
+  role           String   @db.VarChar(20) // OWNER, ADMIN, MEMBER, VIEWER
+  joinedAt       DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@map("org_members")
+}
+
+model Invitation {
+  id             String   @id @default(uuid()) @db.Uuid
+  email          String   @db.VarChar(255)
+  organizationId String   @db.Uuid
+  workspaceId    String?  @db.Uuid
+  role           String   @db.VarChar(20) @default("MEMBER")
+  invitedById    String   @db.Uuid
+  status         String   @db.VarChar(20) @default("PENDING") // PENDING, ACCEPTED, DECLINED, EXPIRED
+  tokenHash      String   @unique @db.VarChar(255)
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workspace    Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  invitedBy    User         @relation("InvitedBy", fields: [invitedById], references: [id])
+
+  @@index([email])
+  @@index([organizationId])
+  @@map("invitations")
+}
+
+model Workspace {
+  id             String   @id @default(uuid()) @db.Uuid
+  name           String   @db.VarChar(100)
+  slug           String   @db.VarChar(50)
+  organizationId String   @db.Uuid
+  mcpEndpoint    String?  @db.VarChar(500)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members            WorkspaceMember[]
+  connectorInstances ConnectorInstance[]
+  apiKeys            ApiKey[]
+  events             Event[]
+  toolExecutions     ToolExecution[]
+  webhookEndpoints   WebhookEndpoint[]
+  invitations        Invitation[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @db.Uuid
+  workspaceId String   @db.Uuid
+  role        String   @db.VarChar(20) // OWNER, ADMIN, MEMBER, VIEWER
+  joinedAt    DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+  @@map("workspace_members")
+}
+
+// ═══════════════════════════════════════════════════════
+//  API KEYS
+// ═══════════════════════════════════════════════════════
+
+model ApiKey {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @db.Uuid
+  workspaceId String    @db.Uuid
+  name        String    @db.VarChar(100)
+  keyPrefix   String    @db.VarChar(12)  // First 8 chars for identification
+  keyHash     String    @unique @db.VarChar(255)
+  scopes      String[]  @db.VarChar(100)
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([keyHash])
+  @@index([workspaceId])
+  @@map("api_keys")
+}
+
+// ═══════════════════════════════════════════════════════
+//  CONNECTORS
+// ═══════════════════════════════════════════════════════
+
+model ConnectorDefinition {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @db.VarChar(100)
+  slug        String   @unique @db.VarChar(50)
+  description String   @db.Text
+  iconUrl     String   @db.VarChar(500)
+  category    String   @db.VarChar(50)
+  authType    String   @db.VarChar(20) // OAUTH2, API_KEY, BEARER_TOKEN, BASIC_AUTH, CUSTOM, NONE
+  version     String   @db.VarChar(20)
+  isOfficial  Boolean  @default(false)
+  isPublic    Boolean  @default(true)
+  oauthConfig Json?    // { authorizationUrl, tokenUrl, scopes, ... }
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  instances ConnectorInstance[]
+  tools     ToolDefinition[]
+
+  @@index([slug])
+  @@index([category])
+  @@map("connector_definitions")
+}
+
+model ConnectorInstance {
+  id             String    @id @default(uuid()) @db.Uuid
+  workspaceId    String    @db.Uuid
+  definitionId   String    @db.Uuid
+  status         String    @db.VarChar(20) @default("CONFIGURING")
+  displayName    String    @db.VarChar(100)
+  config         Json?
+  lastHealthCheck DateTime?
+  lastSyncAt     DateTime?
+  errorMessage   String?   @db.Text
+  isEnabled      Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  workspace  Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  definition ConnectorDefinition @relation(fields: [definitionId], references: [id])
+  secrets    SecretEntry[]
+  executions ToolExecution[]
+
+  @@unique([workspaceId, definitionId])
+  @@index([workspaceId])
+  @@index([status])
+  @@map("connector_instances")
+}
+
+// ═══════════════════════════════════════════════════════
+//  SECRET VAULT
+// ═══════════════════════════════════════════════════════
+
+model SecretEntry {
+  id                  String   @id @default(uuid()) @db.Uuid
+  connectorInstanceId String   @db.Uuid
+  key                 String   @db.VarChar(100) // e.g., "access_token", "api_key", "refresh_token"
+  encryptedValue      String   @db.Text         // AES-256-GCM encrypted
+  version             Int      @default(1)
+  expiresAt           DateTime?
+  rotateAfter         DateTime?
+  lastAccessedAt      DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  connectorInstance ConnectorInstance @relation(fields: [connectorInstanceId], references: [id], onDelete: Cascade)
+
+  @@unique([connectorInstanceId, key, version])
+  @@index([connectorInstanceId])
+  @@index([expiresAt])
+  @@map("secret_entries")
+}
+
+// ═══════════════════════════════════════════════════════
+//  TOOLS
+// ═══════════════════════════════════════════════════════
+
+model ToolDefinition {
+  id                    String  @id @default(uuid()) @db.Uuid
+  connectorDefinitionId String  @db.Uuid
+  name                  String  @db.VarChar(100) // e.g., "create_issue"
+  namespacedName        String  @db.VarChar(200) // e.g., "github.create_issue"
+  description           String  @db.Text
+  inputSchema           Json    // JSON Schema for input validation
+  outputSchema          Json?   // JSON Schema for output
+  isEnabled             Boolean @default(true)
+  category              String? @db.VarChar(50)
+  version               String  @db.VarChar(20) @default("1.0.0")
+  metadata              Json?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  connectorDefinition ConnectorDefinition @relation(fields: [connectorDefinitionId], references: [id], onDelete: Cascade)
+  executions          ToolExecution[]
+
+  @@unique([connectorDefinitionId, name])
+  @@index([namespacedName])
+  @@map("tool_definitions")
+}
+
+model ToolExecution {
+  id                  String   @id @default(uuid()) @db.Uuid
+  toolDefinitionId    String   @db.Uuid
+  workspaceId         String   @db.Uuid
+  connectorInstanceId String   @db.Uuid
+  userId              String?  @db.Uuid
+  input               Json
+  output              Json?
+  status              String   @db.VarChar(20) // SUCCESS, ERROR, TIMEOUT, RATE_LIMITED, PERMISSION_DENIED
+  latencyMs           Int
+  errorMessage        String?  @db.Text
+  correlationId       String?  @db.VarChar(100)
+  createdAt           DateTime @default(now())
+
+  toolDefinition    ToolDefinition    @relation(fields: [toolDefinitionId], references: [id])
+  workspace         Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connectorInstance ConnectorInstance  @relation(fields: [connectorInstanceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([toolDefinitionId])
+  @@index([status])
+  @@index([correlationId])
+  @@map("tool_executions")
+}
+
+// ═══════════════════════════════════════════════════════
+//  BILLING
+// ═══════════════════════════════════════════════════════
+
+model Subscription {
+  id                   String    @id @default(uuid()) @db.Uuid
+  organizationId       String    @db.Uuid
+  plan                 String    @db.VarChar(20) @default("FREE")
+  status               String    @db.VarChar(20) @default("ACTIVE")
+  stripeCustomerId     String?   @unique @db.VarChar(255)
+  stripeSubscriptionId String?   @unique @db.VarChar(255)
+  currentPeriodStart   DateTime  @default(now())
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean   @default(false)
+  trialEndsAt          DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([stripeCustomerId])
+  @@map("subscriptions")
+}
+
+model UsageRecord {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  period         String   @db.VarChar(7) // YYYY-MM
+  toolCalls      Int      @default(0)
+  connectedApps  Int      @default(0)
+  storageUsedMb  Float    @default(0)
+  activeSeats    Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, period])
+  @@index([organizationId])
+  @@map("usage_records")
+}
+
+// ═══════════════════════════════════════════════════════
+//  EVENTS & AUDIT
+// ═══════════════════════════════════════════════════════
+
+model Event {
+  id             String   @id @default(uuid()) @db.Uuid
+  type           String   @db.VarChar(50)
+  actorId        String?  @db.Uuid
+  workspaceId    String?  @db.Uuid
+  resourceType   String?  @db.VarChar(50)
+  resourceId     String?  @db.Uuid
+  metadata       Json?
+  ipAddress      String?  @db.VarChar(45)
+  userAgent      String?  @db.VarChar(500)
+  createdAt      DateTime @default(now())
+
+  actor     User?      @relation("EventActor", fields: [actorId], references: [id], onDelete: SetNull)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([type])
+  @@index([actorId])
+  @@index([workspaceId])
+  @@index([createdAt])
+  @@index([resourceType, resourceId])
+  @@map("events")
+}
+
+// ═══════════════════════════════════════════════════════
+//  WEBHOOKS
+// ═══════════════════════════════════════════════════════
+
+model WebhookEndpoint {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @db.Uuid
+  url         String   @db.VarChar(500)
+  secretHash  String   @db.VarChar(255)
+  events      String[] @db.VarChar(50)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace  Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@index([workspaceId])
+  @@map("webhook_endpoints")
+}
+
+model WebhookDelivery {
+  id             String   @id @default(uuid()) @db.Uuid
+  endpointId     String   @db.Uuid
+  eventType      String   @db.VarChar(50)
+  payload        Json
+  status         String   @db.VarChar(20) @default("PENDING")
+  statusCode     Int?
+  responseBody   String?  @db.Text
+  attempts       Int      @default(0)
+  nextRetryAt    DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime @default(now())
+
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([endpointId])
+  @@index([status])
+  @@index([nextRetryAt])
+  @@map("webhook_deliveries")
+}
+
+// ═══════════════════════════════════════════════════════
+//  ADMIN
+// ═══════════════════════════════════════════════════════
+
+model FeatureFlag {
+  id                String   @id @default(uuid()) @db.Uuid
+  key               String   @unique @db.VarChar(100)
+  name              String   @db.VarChar(100)
+  description       String?  @db.Text
+  isEnabled         Boolean  @default(false)
+  rolloutPercentage Float    @default(100)
+  targetOrgs        String[] @db.Uuid
+  metadata          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("feature_flags")
+}
+
+model Announcement {
+  id        String    @id @default(uuid()) @db.Uuid
+  title     String    @db.VarChar(200)
+  content   String    @db.Text
+  type      String    @db.VarChar(20) // info, warning, maintenance, feature
+  isActive  Boolean   @default(true)
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("announcements")
+}
+
+model EmailOtp {
+  id        String    @id @default(uuid()) @db.Uuid
+  email     String    @db.VarChar(255)
+  codeHash  String    @db.VarChar(255)
+  attempts  Int       @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([email])
+  @@index([expiresAt])
+  @@map("email_otps")
+}
+
