@@ -62,6 +62,16 @@ async function bootstrap(): Promise<Express> {
 }
 
 export default async function handler(req: Request, res: Response) {
-  await bootstrap();
-  server(req, res);
+  try {
+    await bootstrap();
+    server(req, res);
+  } catch (err: any) {
+    console.error('Serverless bootstrap error:', err);
+    res.status(500).json({
+      statusCode: 500,
+      message: 'Server initialization error',
+      error: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+    });
+  }
 }

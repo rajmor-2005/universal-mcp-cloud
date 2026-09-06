@@ -21,8 +21,12 @@ export class DatabaseService extends PrismaClient implements OnModuleInit, OnMod
   }
 
   async onModuleInit() {
-    await this.$connect();
-    this.logger.info('Database connection established');
+    try {
+      await this.$connect();
+      this.logger.info('Database connection established');
+    } catch (err: any) {
+      this.logger.warn({ msg: err.message }, 'Database connection failed during startup (will retry on query)');
+    }
   }
 
   async onModuleDestroy() {
