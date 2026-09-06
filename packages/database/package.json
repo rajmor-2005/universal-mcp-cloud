@@ -15,7 +15,7 @@
     "dev": "tsc -p tsconfig.build.json --watch",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit -p tsconfig.build.json",
-    "generate": "npx dotenv-cli -e ../../.env -- prisma generate",
+    "generate": "prisma generate --schema=prisma/schema.prisma",
     "migrate": "npx dotenv-cli -e ../../.env -- prisma migrate dev",
     "migrate:deploy": "npx dotenv-cli -e ../../.env -- prisma migrate deploy",
     "migrate:reset": "npx dotenv-cli -e ../../.env -- prisma migrate reset --force",
